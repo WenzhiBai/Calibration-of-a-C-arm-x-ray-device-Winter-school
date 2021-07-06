@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
+#include <iostream>
 
 using namespace cv;
 using namespace std;
@@ -96,19 +97,35 @@ static double computeReprojectionErrors(
 /*****************************************************************************************************************************/
 // Define 3D world coordinates with phantom pattern*
 /*****************************************************************************************************************************/
-static void calcChessboardCorners(Size boardSize, float squareSize, vector<Point3f>& corners, Pattern patternType = CHESSBOARD)
+static void calcChessboardCorners(Size boardSize, float squareSize, vector<vector<Point3f> >& corners, Pattern patternType = CHESSBOARD)
 {
     corners.resize(0);
 
     switch(patternType)
     {
-      case CHESSBOARD:
-      case CIRCLES_GRID:
+    case CHESSBOARD:
+    case CIRCLES_GRID:
 /********************************************************************************************************************/
-            /* please finish the function code here and push back the computed points to the vector "corners" */
+        /* please finish the function code here and push back the computed points to the vector "corners" */
 /********************************************************************************************************************/
-        break;
-      default:
+{
+    vector<Point3f> object_points;
+    for (int i = 0;i < boardSize.height;i++)
+    {
+        for (int j = 0;j < boardSize.width;j++)
+        {
+            Point3f realPoint;
+            /* 假设标定板放在世界坐标系中z=0的平面上 */
+            realPoint.x = i*squareSize;
+            realPoint.y = j*squareSize;
+            realPoint.z = 0;
+            object_points.push_back(realPoint);
+        }
+    }
+    corners.push_back(object_points);
+    break;
+}
+    default:
         CV_Error(Error::StsBadArg, "Unknown pattern type\n");
     }
 }
@@ -127,11 +144,12 @@ static bool runCalibration( vector<vector<Point2f> > imagePoints,
 
     distCoeffs = Mat::zeros(8, 1, CV_64F);
 
-    vector<vector<Point3f> > objectPoints(1);
-
+    vector<vector<Point3f> > objectPoints;
+    
+    cout << "11111" << endl;
     // Defining the world coordinates for 3D points
-    calcChessboardCorners(boardSize, squareSize, objectPoints[0], patternType);
-    objectPoints.resize(imagePoints.size(),objectPoints[0]);
+    calcChessboardCorners(boardSize, squareSize, objectPoints, patternType);
+    cout << "22222" << endl;
 
     /* Performing camera calibration by passing the value of known 3D points (objectPoints) and corresponding pixel
     
@@ -139,7 +157,10 @@ static bool runCalibration( vector<vector<Point2f> > imagePoints,
 /********************************************************************************************************************/
     /* please try to call the calibrateCamera function here and return its value to the varibale "rms" */
 /********************************************************************************************************************/
-    
+    cout << "33333" << endl;
+    double rms = calibrateCamera(objectPoints, imagePoints, imageSize, cameraMatrix, distCoeffs, rvecs, tvecs);
+    cout << "44444" << endl;
+
     printf("RMS error reported by calibrateCamera: %g\n", rms);
 
     bool ok = checkRange(cameraMatrix) && checkRange(distCoeffs);
@@ -258,9 +279,11 @@ static bool runAndSave(const string& outputFilename,
     vector<float> reprojErrs;
     double totalAvgErr = 0;
 
+    cout << "1111" << endl;
     bool ok = runCalibration(imagePoints, imageSize, boardSize, patternType, squareSize,
                    aspectRatio, flags, cameraMatrix, distCoeffs,
                    rvecs, tvecs, reprojErrs, totalAvgErr);
+    cout << "2222" << endl;
     printf("%s. avg reprojection error = %.2f\n",
            ok ? "Calibration succeeded" : "Calibration failed",
            totalAvgErr);
@@ -297,7 +320,7 @@ int main( int argc, char** argv )
     Pattern pattern = CIRCLES_GRID; // the default pattern type of the calibration board
 
     cv::CommandLineParser parser(argc, argv,
-        "{help ||}{w||}{h||}{pt|chessboard|}{n|10|}{s|1|}{o|out_camera_data.yml|}"
+        "{help ||}{w||}{h||}{pt|circles|}{n|10|}{s|1|}{o|out_camera_data.yml|}"
         "{op||}{oe||}{zt||}{a|1|}{p||}{v||}{su||}"
         "{@input_data|0|}");
     if (parser.has("help"))
@@ -317,6 +340,7 @@ int main( int argc, char** argv )
         else
             return fprintf( stderr, "Invalid pattern type: must be chessboard or circles\n" ), -1;
     }
+    cout << "pattern type is: " << pattern << endl;
     squareSize = parser.get<float>("s");
     nframes = parser.get<int>("n");
     aspectRatio = parser.get<float>("a");
@@ -330,6 +354,7 @@ int main( int argc, char** argv )
         flags |= CALIB_FIX_PRINCIPAL_POINT;
     if ( parser.has("o") )
         outputFilename = parser.get<string>("o");
+        cout << "outputFilename is: " << outputFilename << endl;
     showUndistorted = parser.has("su");
     inputFilename = parser.get<string>("@input_data");
     if (!parser.check())
@@ -389,7 +414,8 @@ int main( int argc, char** argv )
         cvtColor(view, viewGray, COLOR_BGR2GRAY);
 
         // Finding checker board corners, if desired number of corners are found in the image then found = true
-        bool found;
+        bool found = false;
+        cout << "pattern is: " << pattern << endl;
         switch( pattern )
         {
             case CHESSBOARD:
@@ -397,6 +423,9 @@ int main( int argc, char** argv )
                     CALIB_CB_ADAPTIVE_THRESH | CALIB_CB_FAST_CHECK | CALIB_CB_NORMALIZE_IMAGE);
                 break;
             case CIRCLES_GRID:
+                found = findCirclesGrid( view, boardSize, pointbuf);
+                cout << "findCirclesGrid successful: " << found << endl;
+                cout << "findCirclesGrid pointbuf: " << pointbuf.size() << endl;
 /********************************************************************************************************************/
                 /* please try to call findCirclesGrid here and return its value to the vairable "found" */
 /********************************************************************************************************************/
@@ -417,6 +446,8 @@ int main( int argc, char** argv )
         // Displaying the detected corner points on the checker board
         if(found)
             drawChessboardCorners( view, boardSize, Mat(pointbuf), found );
+        else
+            waitKey(0);
 
         if( mode == CALIBRATED && undistortImage )
         {
@@ -435,6 +466,7 @@ int main( int argc, char** argv )
 
         if( mode == CAPTURING && imagePoints.size() >= (unsigned)nframes ) // extract imagePoints from all the frames
         {
+            cout << "111" << endl;
             if( runAndSave(outputFilename, imagePoints, imageSize,
                        boardSize, pattern, squareSize, aspectRatio,
                        flags, cameraMatrix, distCoeffs,
@@ -443,6 +475,7 @@ int main( int argc, char** argv )
             else
                 mode = DETECTION;
             break;
+            cout << "222" << endl;
         }
     }
 

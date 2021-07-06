@@ -1,4 +1,5 @@
-cmake_minimum_required(VERSION 3.15)
+#cmake_minimum_required(VERSION 3.15)
+cmake_minimum_required(VERSION 3.10)
 project(x_ray_calibration)
 
 set(OpenCV_DIR /opt/opencv-3.2.0/share/OpenCV/)
